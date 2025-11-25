@@ -1,4 +1,4 @@
-# app.py
+# app_final_1912_professional.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -16,10 +16,9 @@ except ImportError:
 
 try:
     import joblib
-    JOBLIB_AVAILABLE = True
 except ImportError:
     st.warning("joblib not available - please install it")
-    JOBLIB_AVAILABLE = False
+    joblib = None
 
 try:
     import plotly.graph_objects as go
@@ -36,20 +35,22 @@ except ImportError:
     st.warning("streamlit components not available")
     COMPONENTS_AVAILABLE = False
 
+# Rest of your code continues...
+
 # -------------------------
 # Project identity
 # -------------------------
-PROJECT_NAME = "1912 Automation — Smart Grid Intelligence"
+PROJECT_NAME = "ELECTRICITY OPERATIONS INTELLIGENCE (EOI-1912)"
 PROJECT_TAGLINE = "Advanced Fault Detection • Predictive Analytics • Automated Restoration"
 PROJECT_SLOGAN = "Detect. Diagnose. Restore."
 
 # -------------------------
-# File paths - Handle missing files gracefully
+# File paths
 # -------------------------
 SEARCH_DIR = "/mnt/data"
 FAULT_PATH_FALLBACKS = [
     "best_model.pkl",
-    "fault_model.pkl", 
+    "fault_model.pkl",
     "fault_classifier.pkl",
     "best_fault_model.pkl",
     "fault_pipe.pkl",
@@ -60,6 +61,12 @@ ETR_NOM_MODEL_PATH = "nom_regression_model.pkl"
 ETR_ENCODERS_PATH  = "feature_encoders 1.pkl"
 HIERARCHY_PATH     = "org_hierarchy.xlsx"
 COMPLAINTS_DATA_PATH = "data.xlsx"
+ILLU_IMAGE_PATH    = "2011.i402.058..Electricity and lighting flat composition.jpg"
+
+# -------------------------
+# Page config with enhanced theme
+# -------------------------
+st.set_page_config(page_title=PROJECT_NAME, page_icon="⚡", layout="wide")
 
 # Enhanced Professional CSS Theme
 st.markdown("""
@@ -263,6 +270,14 @@ st.markdown("""
         border-color: rgba(66, 153, 225, 0.5);
     }
     
+    /* Custom metric styling */
+    .stMetric {
+        background: rgba(26, 32, 44, 0.8) !important;
+        border-radius: 12px !important;
+        padding: 15px !important;
+        border: 1px solid rgba(74, 85, 104, 0.3) !important;
+    }
+    
     /* Button styling */
     .stButton button {
         background: linear-gradient(135deg, #4299e1, #38b2ac) !important;
@@ -305,41 +320,13 @@ def parse_numeric(text):
         return np.nan
 
 # -------------------------
-# Load complaints data with error handling
+# Load complaints data
 # -------------------------
 @st.cache_data
 def load_complaints_data(path=COMPLAINTS_DATA_PATH):
     if not os.path.exists(path):
-        st.warning(f"Complaints data file not found at {path}")
-        # Create sample data for demo
-        sample_data = {
-            'Request_Id': ['REQ001', 'REQ002', 'REQ003'],
-            'Feeder_MSN': ['FDR001', 'FDR002', 'FDR003'],
-            'Feeder_ProcessStatus': ['success', 'fail', 'success'],
-            'DTR_MSN': ['DTR001', 'DTR002', 'DTR003'],
-            'DTR_ProcessStatus': ['success', 'success', 'fail'],
-            'Consumer_MSN': ['CON001', 'CON002', 'CON003'],
-            'Consumer_ProcessStatus': ['fail', 'success', 'success'],
-            'Consumer_Phase_Id': [3, 1, 3],
-            'f_vr': [230.5, 231.2, 229.8],
-            'f_vy': [229.8, 230.1, 231.5],
-            'f_vb': [231.1, 230.8, 229.2],
-            'f_ir': [1.2, 1.1, 1.3],
-            'f_iy': [1.1, 1.0, 1.2],
-            'f_ib': [1.3, 1.2, 1.1],
-            'd_vr': [229.5, 230.2, 228.8],
-            'd_vy': [228.8, 229.1, 230.5],
-            'd_vb': [230.1, 229.8, 228.2],
-            'd_ir': [0.8, 0.9, 0.7],
-            'd_iy': [0.9, 0.8, 0.6],
-            'd_ib': [0.7, 0.6, 0.8],
-            'Final_Label': ['DTHT', 'FOC', 'DTLT'],
-            'region': ['Region A', 'Region B', 'Region A'],
-            'circle': ['Circle 1', 'Circle 2', 'Circle 1'],
-            'division': ['Division X', 'Division Y', 'Division X'],
-            'zone': ['Zone P', 'Zone Q', 'Zone P']
-        }
-        return pd.DataFrame(sample_data)
+        st.error(f"Complaints data file not found at {path}")
+        return pd.DataFrame()
     try:
         df = pd.read_excel(path)
         return df
@@ -348,13 +335,10 @@ def load_complaints_data(path=COMPLAINTS_DATA_PATH):
         return pd.DataFrame()
 
 # -------------------------
-# Load models with error handling
+# Load models
 # -------------------------
 @st.cache_resource
 def find_and_load_fault_bundle():
-    if not JOBLIB_AVAILABLE:
-        return None, "Joblib not available"
-    
     for p in FAULT_PATH_FALLBACKS:
         if os.path.exists(p):
             try:
@@ -367,7 +351,28 @@ def find_and_load_fault_bundle():
                     return m, p
                 except Exception:
                     continue
-    return None, "No fault model found"
+    if os.path.exists(SEARCH_DIR):
+        files = os.listdir(SEARCH_DIR)
+        patterns = ["*fault*.pkl", "*best*.pkl", "*classifier*.pkl", "*pipe*.pkl", "*model*.pkl",
+                    "*fault*.joblib", "*best*.joblib", "*classifier*.joblib", "*model*.joblib", "*.pkl", "*.joblib"]
+        seen = set()
+        for pat in patterns:
+            for fname in fnmatch.filter(files, pat):
+                if fname in seen:
+                    continue
+                seen.add(fname)
+                full = os.path.join(SEARCH_DIR, fname)
+                try:
+                    with open(full, "rb") as f:
+                        bundle = pickle.load(f)
+                    return bundle, full
+                except Exception:
+                    try:
+                        m = joblib.load(full)
+                        return m, full
+                    except Exception:
+                        continue
+    return None, None
 
 _fault_bundle, _fault_loaded_from = find_and_load_fault_bundle()
 fault_pipeline = None
@@ -383,10 +388,6 @@ if _fault_bundle is not None:
 @st.cache_resource
 def load_nom(path=ETR_NOM_MODEL_PATH, enc_path=ETR_ENCODERS_PATH):
     m = None; enc = {}
-    
-    if not JOBLIB_AVAILABLE:
-        return m, enc
-        
     if os.path.exists(path):
         try:
             m = joblib.load(path)
@@ -402,50 +403,37 @@ def load_nom(path=ETR_NOM_MODEL_PATH, enc_path=ETR_ENCODERS_PATH):
 nom_model, nom_encoders = load_nom()
 
 # -------------------------
-# Load hierarchy with error handling
+# Load hierarchy
 # -------------------------
 @st.cache_data
 def load_hierarchy(path=HIERARCHY_PATH):
     if not os.path.exists(path):
-        st.warning(f"Hierarchy file not found at {path}")
-        # Return sample hierarchy data
-        sample_data = {
-            'region': ['Region A', 'Region B'],
-            'circle': ['Circle 1', 'Circle 2'], 
-            'division': ['Division X', 'Division Y'],
-            'zone': ['Zone P', 'Zone Q']
-        }
-        return pd.DataFrame(sample_data), {'region': 'region', 'circle': 'circle', 'division': 'division', 'zone': 'zone'}
-    
-    try:
-        df = pd.read_excel(path).fillna("")
-        col_map = {}
-        for candidate in ["region","region_name","circle","circle_name","division","division_name","zone","zone_name"]:
-            for c in df.columns:
-                if candidate in c.lower():
-                    key = candidate.split("_")[0]
-                    if key not in col_map:
-                        col_map[key] = c
-        if "region" not in col_map:
-            for c in df.columns:
-                if "reg" in c.lower():
-                    col_map["region"] = c; break
-        if "circle" not in col_map:
-            for c in df.columns:
-                if "circ" in c.lower():
-                    col_map["circle"] = c; break
-        if "division" not in col_map:
-            for c in df.columns:
-                if "div" in c.lower():
-                    col_map["division"] = c; break
-        if "zone" not in col_map:
-            for c in df.columns:
-                if "zone" in c.lower():
-                    col_map["zone"] = c; break
-        return df, col_map
-    except Exception as e:
-        st.error(f"Error loading hierarchy: {e}")
         return pd.DataFrame(), {}
+    df = pd.read_excel(path).fillna("")
+    col_map = {}
+    for candidate in ["region","region_name","circle","circle_name","division","division_name","zone","zone_name"]:
+        for c in df.columns:
+            if candidate in c.lower():
+                key = candidate.split("_")[0]
+                if key not in col_map:
+                    col_map[key] = c
+    if "region" not in col_map:
+        for c in df.columns:
+            if "reg" in c.lower():
+                col_map["region"] = c; break
+    if "circle" not in col_map:
+        for c in df.columns:
+            if "circ" in c.lower():
+                col_map["circle"] = c; break
+    if "division" not in col_map:
+        for c in df.columns:
+            if "div" in c.lower():
+                col_map["division"] = c; break
+    if "zone" not in col_map:
+        for c in df.columns:
+            if "zone" in c.lower():
+                col_map["zone"] = c; break
+    return df, col_map
 
 df_hier, hier_map = load_hierarchy()
 
@@ -454,19 +442,13 @@ df_hier, hier_map = load_hierarchy()
 # -------------------------
 st.markdown("""
     <div style='text-align: center; padding: 20px 0;'>
-        <div class="proj-title">⚡ 1912 Automation — Smart Grid Intelligence</div>
+        <div class="proj-title">⚡ ELECTRICITY OPERATIONS INTELLIGENCE (EOI-1912)</div>
         <div class="proj-tag">Advanced Fault Detection • Predictive Analytics • Automated Restoration</div>
         <div style='margin-top: 10px; color: #718096; font-size: 14px;'>
             Real-time Monitoring | AI-Powered Diagnostics | Smart Grid Management
         </div>
     </div>
 """, unsafe_allow_html=True)
-
-# Display system status
-if not JOBLIB_AVAILABLE:
-    st.error("⚠️ Joblib not installed. Some features may not work.")
-if not PLOTLY_AVAILABLE:
-    st.warning("📊 Plotly not available. Using alternative charts.")
 
 # -------------------------
 # Main Application Workflow
@@ -484,7 +466,7 @@ if st.button("🚀 Click to Fetch Live Complaints & Predict Faults", use_contain
     complaints_df = load_complaints_data()
     
     if complaints_df.empty:
-        st.error("No complaints data available.")
+        st.error("No complaints data available. Please check the data file.")
     else:
         # Select random complaints (5-8)
         num_complaints = min(random.randint(5, 8), len(complaints_df))
@@ -533,8 +515,8 @@ fault_info = {
         "description": "Distribution Transformer High Imbalance - Significant voltage imbalance across three phases"
     },
     "DTLT": {
-        "meaning": "Voltage OK but 1 phase current ZERO", 
-        "analogy": "Wire cut / LT line broken",
+        "meaning": "Voltage OK but 1 phase current ZERO",
+        "analogy": "Wire cut / LT line broken", 
         "description": "Distribution Transformer Low Current - One phase has zero current indicating broken line"
     },
     "FOC": {
@@ -544,7 +526,7 @@ fault_info = {
     },
     "FOC/DT HT": {
         "meaning": "DT readings NULL, ping patterns decide fault",
-        "analogy": "DT meter dead / communication fail", 
+        "analogy": "DT meter dead / communication fail",
         "description": "DT Communication Failure - Transformer meter offline, using ping patterns for diagnosis"
     }
 }
@@ -690,7 +672,7 @@ if 'current_step' in st.session_state and st.session_state.current_step >= 3:
                         st.write(f"B: {float(d_ib):.2f} A")
             
             # Simulate processing time
-            time.sleep(0.5)
+            time.sleep(1)
         
         progress_bar.empty()
         status_text.empty()
@@ -706,7 +688,8 @@ if 'current_step' in st.session_state and st.session_state.current_step >= 3:
         col1, col2 = st.columns(2)
         
         with col1:
-            if PLOTLY_AVAILABLE and not fault_counts.empty:
+            # Pie chart of fault distribution
+            if not fault_counts.empty:
                 fig = px.pie(
                     values=fault_counts.values, 
                     names=fault_counts.index,
@@ -719,18 +702,24 @@ if 'current_step' in st.session_state and st.session_state.current_step >= 3:
                     font_color='white'
                 )
                 st.plotly_chart(fig, use_container_width=True)
-            elif not fault_counts.empty:
-                st.write("**Fault Type Distribution**")
-                chart_data = pd.DataFrame({
-                    'Fault Type': fault_counts.index,
-                    'Count': fault_counts.values
-                })
-                st.bar_chart(chart_data.set_index('Fault Type'))
         
         with col2:
+            # Bar chart of fault counts
             if not fault_counts.empty:
-                st.write("**Fault Count Summary**")
-                st.dataframe(fault_counts, use_container_width=True)
+                fig = px.bar(
+                    x=fault_counts.index,
+                    y=fault_counts.values,
+                    title="Fault Count by Type",
+                    labels={'x': 'Fault Type', 'y': 'Count'},
+                    color=fault_counts.values,
+                    color_continuous_scale='blues'
+                )
+                fig.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font_color='white'
+                )
+                st.plotly_chart(fig, use_container_width=True)
         
         # Store analysis results
         st.session_state.analysis_complete = True
@@ -867,7 +856,7 @@ if 'etr_prediction_started' in st.session_state and st.session_state.etr_predict
                 </div>
                 """, unsafe_allow_html=True)
             
-            time.sleep(0.3)
+            time.sleep(0.5)  # Simulate processing time
         
         progress_bar.empty()
         status_text.empty()
@@ -886,7 +875,7 @@ if 'etr_complete' in st.session_state and st.session_state.etr_complete:
     
     etr_results = st.session_state.get('etr_results', [])
     
-    if etr_results and COMPONENTS_AVAILABLE:
+    if etr_results:
         # Find the maximum ETR for the overall countdown
         max_etr = max(result['ETR_Minutes'] for result in etr_results)
         end_time = datetime.now() + timedelta(minutes=max_etr)
@@ -962,8 +951,6 @@ if 'etr_complete' in st.session_state and st.session_state.etr_complete:
             </script>
             '''
             components.html(individual_countdown, height=80)
-    elif not COMPONENTS_AVAILABLE:
-        st.warning("Countdown timers not available - components module missing")
 
 st.markdown("</div>", unsafe_allow_html=True)
 
