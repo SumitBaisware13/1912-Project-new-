@@ -2,12 +2,40 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pickle, joblib, os, fnmatch, random
+import os
+import fnmatch
+import random
 from datetime import datetime, timedelta
-import streamlit.components.v1 as components
 import time
-import plotly.graph_objects as go
-import plotly.express as px
+
+# Try to import optional dependencies
+try:
+    import pickle
+except ImportError:
+    st.warning("pickle module not available")
+
+try:
+    import joblib
+except ImportError:
+    st.warning("joblib not available - please install it")
+    joblib = None
+
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    st.warning("plotly not available - charts will be disabled")
+    PLOTLY_AVAILABLE = False
+
+try:
+    import streamlit.components.v1 as components
+    COMPONENTS_AVAILABLE = True
+except ImportError:
+    st.warning("streamlit components not available")
+    COMPONENTS_AVAILABLE = False
+
+# Rest of your code continues...
 
 # -------------------------
 # Project identity
